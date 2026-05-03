@@ -104,7 +104,9 @@ function CompletionView({ task, onDone }) {
   const [gpsNote, setGpsNote] = useState(null)
 
   const repeatCount = task.repeat_count ?? 1
-  const recordCount = task.record_count ?? 0
+  // Use the requesting user's own submission count so the counter reflects
+  // their personal progress (important for group tasks).
+  const recordCount = task.my_record_count ?? task.record_count ?? 0
   const nextNum = recordCount + 1
   const isRepetitive = repeatCount > 1
   const allDone = recordCount >= repeatCount
@@ -116,7 +118,7 @@ function CompletionView({ task, onDone }) {
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
         () => resolve({ lat: null, lng: null }),
-        { timeout: 5000, maximumAge: 30000 },
+        { timeout: 8000, maximumAge: 0 },
       )
     })
   }

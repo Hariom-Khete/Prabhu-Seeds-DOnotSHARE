@@ -94,8 +94,11 @@ export function useSubmitRecord() {
   return useMutation({
     mutationFn: ({ taskId, ...body }) =>
       apiClient.post(`/api/v1/tasks/${taskId}/records`, body).then((r) => r.data),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      // Refresh task list (counts, status) and the specific task's record list
+      // so owner/manager sees the new submission + location immediately.
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['task-records', variables.taskId] })
     },
   })
 }

@@ -27,7 +27,7 @@ const schema = z.object({
   territory: z.string().optional(),
   crop: z.string().optional(),
   product: z.string().optional(),
-  target: z.coerce.number().int().min(1).default(1),
+  repeat_count: z.coerce.number().int().min(1).default(1),
   description: z.string().optional(),
   month: z.string().optional(),
   location: z.string().optional(),
@@ -160,7 +160,7 @@ export default function CreateTaskDialog({ open, onOpenChange }) {
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { target: 1 },
+    defaultValues: { repeat_count: 1 },
   })
 
   const dept = watch('dept') ?? ''
@@ -179,7 +179,7 @@ export default function CreateTaskDialog({ open, onOpenChange }) {
   // Reset everything when dialog closes
   useEffect(() => {
     if (!open) {
-      reset({ target: 1 })
+      reset({ repeat_count: 1 })
       setAssignmentType('singular')
       setSelectedMembers([])
     }
@@ -405,15 +405,15 @@ export default function CreateTaskDialog({ open, onOpenChange }) {
                     />
                   </Field>
 
-                  {/* Nos / Target Count */}
-                  <Field label={`Nos / Target Count (${selectedActivity?.unit ?? 'NOS'})`} htmlFor="target" error={errors.target?.message}>
+                  {/* NOS / Repetitions per agent */}
+                  <Field label="NOS / Repetitions per Agent" htmlFor="repeat_count" error={errors.repeat_count?.message}>
                     <input
-                      id="target"
+                      id="repeat_count"
                       type="number"
                       min={1}
-                      {...register('target')}
+                      {...register('repeat_count')}
                       className={inputCls}
-                      placeholder="e.g. 50"
+                      placeholder="e.g. 3"
                     />
                   </Field>
 

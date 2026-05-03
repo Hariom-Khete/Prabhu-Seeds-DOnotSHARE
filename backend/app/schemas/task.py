@@ -20,6 +20,7 @@ class TaskRecordOut(BaseModel):
     id: int
     task_id: int
     submitted_by: uuid.UUID | None
+    submitted_by_name: str | None = None
     village: str | None
     tehsil: str | None
     district: str | None
@@ -102,6 +103,8 @@ class TaskOut(BaseModel):
     created_at: datetime
     repeat_count: int = 1
     record_count: int = 0
+    my_record_count: int = 0           # requesting user's own submission count
+    member_completions: dict[str, int] = {}  # str(user_id) -> their submission count
     description: str | None = None
     assignment_type: str = "singular"
     members: list[uuid.UUID] = []
@@ -111,10 +114,12 @@ class TaskOut(BaseModel):
 
     @property
     def completions_remaining(self) -> int:
-        return max(0, self.repeat_count - self.record_count)
+        return max(0, self.repeat_count - self.my_record_count)
 
     @property
     def is_fully_complete(self) -> bool:
+        if self.assignment_type == "group" and self.member_completions:
+            return all(c >= self.repeat_count for c in self.member_completions.values())
         return self.record_count >= self.repeat_count
 
 

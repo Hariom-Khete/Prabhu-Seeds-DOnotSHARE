@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 class UserBase(BaseModel):
     name: str
+    surname: str | None = None
+    email: str | None = None
     role: str
     state: str | None = None
     hq: str | None = None
@@ -15,11 +17,13 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    pass
+    password: str  # plain-text; hashed before storage
 
 
 class UserUpdate(BaseModel):
     name: str | None = None
+    surname: str | None = None
+    email: str | None = None
     role: str | None = None
     state: str | None = None
     hq: str | None = None

@@ -12,8 +12,8 @@ from app.schemas.task import TaskCreate, TaskUpdate, TaskRecordCreate, TaskOut, 
 from app.services.visibility import get_subordinate_ids, can_see_task
 
 
-async def _enrich(task: Task, db: AsyncSession) -> TaskOut:
-    """Build a TaskOut with record_count, assigned_to_name, and group members populated."""
+async def _enrich(task: Task, db: AsyncSession, current_user_id: uuid.UUID | None = None) -> TaskOut:
+    """Build a TaskOut with record_count, per-member completions, and assigned_to_name populated."""
     rec_count = await db.scalar(
         select(func.count()).select_from(TaskRecord).where(TaskRecord.task_id == task.id)
     ) or 0
@@ -24,14 +24,42 @@ async def _enrich(task: Task, db: AsyncSession) -> TaskOut:
     )).scalars().all()
     member_ids = [m.user_id for m in member_rows]
     member_names: list[str] = []
+    member_completions: dict[str, int] = {}
+
     if member_ids:
         users = (await db.execute(
             select(User).where(User.id.in_(member_ids))
         )).scalars().all()
-        member_names = [u.name for u in users]
+        # Preserve member_ids order so member_names[i] always matches members[i]
+        name_map = {u.id: u.name for u in users}
+        member_names = [name_map.get(uid, '?') for uid in member_ids]
+        for uid in member_ids:
+            cnt = await db.scalar(
+                select(func.count()).select_from(TaskRecord).where(
+                    TaskRecord.task_id == task.id,
+                    TaskRecord.submitted_by == uid,
+                )
+            ) or 0
+            member_completions[str(uid)] = cnt
+
+    # Requesting user's own submission count
+    my_record_count = 0
+    if current_user_id is not None:
+        my_record_count = await db.scalar(
+            select(func.count()).select_from(TaskRecord).where(
+                TaskRecord.task_id == task.id,
+                TaskRecord.submitted_by == current_user_id,
+            )
+        ) or 0
 
     out = TaskOut.model_validate(task)
-    updates: dict = {"record_count": rec_count, "members": member_ids, "member_names": member_names}
+    updates: dict = {
+        "record_count": rec_count,
+        "my_record_count": my_record_count,
+        "member_completions": member_completions,
+        "members": member_ids,
+        "member_names": member_names,
+    }
     if task.assignee:
         updates["assigned_to_name"] = task.assignee.name
     return out.model_copy(update=updates)
@@ -109,7 +137,7 @@ async def list_tasks_with_meta(
         status=status, dept=dept,
         search=search, date_from=date_from, date_to=date_to,
     )
-    task_outs = [await _enrich(t, db) for t in tasks]
+    task_outs = [await _enrich(t, db, user.id) for t in tasks]
 
     total = len(task_outs)
     pending = sum(1 for t in task_outs if t.status == "assigned")
@@ -172,30 +200,77 @@ async def submit_record(task_id: int, data: TaskRecordCreate, submitted_by: uuid
     task = result.scalar_one_or_none()
     if not task:
         raise ValueError("Task not found")
-    if task.status == "completed":
+
+    # Enforce per-user quota first — gives a meaningful error and also lets group-task
+    # members who haven't hit their quota still submit even if the task was prematurely
+    # marked completed.
+    my_count = await db.scalar(
+        select(func.count()).select_from(TaskRecord).where(
+            TaskRecord.task_id == task_id,
+            TaskRecord.submitted_by == submitted_by,
+        )
+    ) or 0
+    if my_count >= task.repeat_count:
+        raise ValueError(f"You have already submitted all {task.repeat_count} completion(s) for this task")
+
+    # For singular tasks block once completed; group tasks rely only on per-user quota above.
+    if task.status == "completed" and task.assignment_type != "group":
         raise ValueError("Cannot submit records for a completed task")
 
     record = TaskRecord(task_id=task_id, submitted_by=submitted_by, **data.model_dump())
     db.add(record)
     await db.flush()
 
-    # Auto-complete the task when all repetitions are done
-    rec_count = await db.scalar(
-        select(func.count()).select_from(TaskRecord).where(TaskRecord.task_id == task_id)
-    ) or 0
-    if rec_count >= task.repeat_count:
-        task.status = "completed"
+    # Auto-complete when all required submissions are in
+    if task.assignment_type == "group":
+        # All assigned members must each reach repeat_count
+        member_rows = (await db.execute(
+            select(TaskMember).where(TaskMember.task_id == task_id)
+        )).scalars().all()
+        member_ids = [m.user_id for m in member_rows]
+        all_done = bool(member_ids)
+        for uid in member_ids:
+            cnt = await db.scalar(
+                select(func.count()).select_from(TaskRecord).where(
+                    TaskRecord.task_id == task_id,
+                    TaskRecord.submitted_by == uid,
+                )
+            ) or 0
+            if cnt < task.repeat_count:
+                all_done = False
+                break
+        if all_done:
+            task.status = "completed"
+    else:
+        # Singular task: check this user's count after the flush
+        if my_count + 1 >= task.repeat_count:
+            task.status = "completed"
 
     await db.commit()
     await db.refresh(record)
     return record
 
 
-async def get_task_records(task_id: int, db: AsyncSession) -> list[TaskRecord]:
+async def get_task_records(task_id: int, db: AsyncSession) -> list[dict]:
+    from app.schemas.task import TaskRecordOut
     result = await db.execute(
         select(TaskRecord).where(TaskRecord.task_id == task_id).order_by(TaskRecord.submitted_at)
     )
-    return list(result.scalars().all())
+    records = list(result.scalars().all())
+
+    # Bulk-fetch submitter names
+    submitter_ids = {r.submitted_by for r in records if r.submitted_by}
+    name_map: dict = {}
+    if submitter_ids:
+        users = (await db.execute(select(User).where(User.id.in_(submitter_ids)))).scalars().all()
+        name_map = {u.id: u.name for u in users}
+
+    out = []
+    for r in records:
+        rec_dict = TaskRecordOut.model_validate(r).model_dump()
+        rec_dict["submitted_by_name"] = name_map.get(r.submitted_by) if r.submitted_by else None
+        out.append(rec_dict)
+    return out
 
 
 async def delete_task(task_id: int, db: AsyncSession) -> bool:

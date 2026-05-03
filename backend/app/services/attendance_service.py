@@ -17,6 +17,7 @@ async def check_in(user_id: uuid.UUID, data: CheckInRequest, db: AsyncSession) -
 
     result = await db.execute(
         select(Attendance)
+        .options(selectinload(Attendance.waypoints))
         .where(Attendance.user_id == user_id, Attendance.date == today)
     )
     existing = result.scalar_one_or_none()
@@ -30,7 +31,8 @@ async def check_in(user_id: uuid.UUID, data: CheckInRequest, db: AsyncSession) -
 
     if existing:
         if existing.check_out is None:
-            raise ValueError("Already checked in today")
+            # Already active — record was loaded with selectinload above, safe to return as-is.
+            return existing
         # Previous session completed — allow re-check-in by resetting the record
         existing.check_in = datetime.now(timezone.utc)
         existing.check_out = None
@@ -47,8 +49,12 @@ async def check_in(user_id: uuid.UUID, data: CheckInRequest, db: AsyncSession) -
             )
             db.add(waypoint)
         await db.commit()
-        await db.refresh(existing)
-        return existing
+        result2 = await db.execute(
+            select(Attendance)
+            .options(selectinload(Attendance.waypoints))
+            .where(Attendance.id == existing.id)
+        )
+        return result2.scalar_one()
 
     attendance = Attendance(user_id=user_id, date=today, check_in=datetime.now(timezone.utc))
     db.add(attendance)
@@ -65,8 +71,14 @@ async def check_in(user_id: uuid.UUID, data: CheckInRequest, db: AsyncSession) -
         )
         db.add(waypoint)
     await db.commit()
-    await db.refresh(attendance)
-    return attendance
+
+    # Re-query with selectinload so waypoints are eagerly loaded for serialization.
+    result2 = await db.execute(
+        select(Attendance)
+        .options(selectinload(Attendance.waypoints))
+        .where(Attendance.id == attendance.id)
+    )
+    return result2.scalar_one()
 
 
 async def check_out(user_id: uuid.UUID, data: CheckOutRequest, db: AsyncSession) -> Attendance:
@@ -115,8 +127,12 @@ async def check_out(user_id: uuid.UUID, data: CheckOutRequest, db: AsyncSession)
     attendance.status = "done"
 
     await db.commit()
-    await db.refresh(attendance)
-    return attendance
+    result2 = await db.execute(
+        select(Attendance)
+        .options(selectinload(Attendance.waypoints))
+        .where(Attendance.id == attendance.id)
+    )
+    return result2.scalar_one()
 
 
 async def add_waypoint(data: WaypointCreate, db: AsyncSession) -> GpsWaypoint:

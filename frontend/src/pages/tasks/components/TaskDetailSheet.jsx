@@ -64,7 +64,7 @@ function CompletionLocations({ taskId, recordCount }) {
     return (
       <div className="space-y-2">
         {Array.from({ length: Math.min(recordCount, 3) }).map((_, i) => (
-          <div key={i} className="h-10 bg-surface-container-low animate-pulse" />
+          <div key={i} className="h-14 bg-surface-container-low animate-pulse" />
         ))}
       </div>
     )
@@ -76,24 +76,42 @@ function CompletionLocations({ taskId, recordCount }) {
     <div className="space-y-2">
       {records.map((rec, i) => {
         const hasLocation = rec.lat != null && rec.lng != null
-        const mapsUrl = hasLocation ? `https://www.google.com/maps?q=${rec.lat},${rec.lng}` : null
+        const mapsUrl = hasLocation
+          ? `https://www.google.com/maps?q=${rec.lat},${rec.lng}`
+          : null
         return (
-          <div key={rec.id} className="flex items-start gap-3 bg-surface-container-low px-3 py-2.5">
+          <div key={rec.id} className="flex items-start gap-3 bg-surface-container-low px-3 py-3">
             <span className="w-6 h-6 bg-primary text-on-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
               {i + 1}
             </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-on-surface">
+            <div className="flex-1 min-w-0 space-y-0.5">
+              {/* Submitter name */}
+              {rec.submitted_by_name && (
+                <p className="text-xs font-bold text-on-surface">{rec.submitted_by_name}</p>
+              )}
+              {/* Timestamp */}
+              <p className="text-xs text-on-surface-variant">
                 {rec.submitted_at ? format(parseISO(rec.submitted_at), 'dd MMM yyyy, hh:mm a') : '—'}
               </p>
+              {/* GPS location */}
               {hasLocation ? (
-                <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-0.5">
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
                   <span className="material-symbols-outlined text-[13px]">location_on</span>
                   {Number(rec.lat).toFixed(5)}, {Number(rec.lng).toFixed(5)}
                 </a>
               ) : (
-                <p className="text-xs text-on-surface-variant/50 mt-0.5">Location not captured</p>
+                <p className="text-xs text-on-surface-variant/50 italic">Location not captured</p>
+              )}
+              {/* Optional farmer details */}
+              {(rec.farmer_name || rec.village) && (
+                <p className="text-xs text-on-surface-variant">
+                  {[rec.farmer_name, rec.village, rec.district].filter(Boolean).join(' · ')}
+                </p>
               )}
             </div>
           </div>
@@ -115,8 +133,10 @@ export default function TaskDetailSheet({ task, open, onOpenChange, onReassign, 
   const isOverdue = deadline && isPast(parseISO(deadline)) && task.status !== 'completed'
   const repeatCount = task.repeat_count ?? 1
   const recordCount = task.record_count ?? 0
-  const pct = Math.min(100, Math.round((recordCount / repeatCount) * 100))
-  const fullyDone = recordCount >= repeatCount
+  // Field staff see only their own progress; managers/owners see the total
+  const displayCount = isManager ? recordCount : (task.my_record_count ?? 0)
+  const pct = Math.min(100, Math.round((displayCount / repeatCount) * 100))
+  const fullyDone = displayCount >= repeatCount
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -264,43 +284,98 @@ export default function TaskDetailSheet({ task, open, onOpenChange, onReassign, 
             {/* PROGRESS */}
             <section>
               <SectionLabel>Repetitions Progress</SectionLabel>
-              <div className="bg-surface-container-low p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`text-3xl font-black font-headline ${fullyDone ? 'text-primary' : 'text-on-surface'}`}>
-                      {recordCount}
-                      <span className="text-base font-medium text-on-surface-variant"> / {repeatCount}</span>
-                    </p>
-                    <p className="text-xs text-on-surface-variant mt-0.5">
-                      {fullyDone ? 'All repetitions completed' : `${repeatCount - recordCount} remaining`}
-                    </p>
+
+              {task.assignment_type === 'group' && isManager && (task.member_names ?? []).length > 0 ? (
+                // ── Group task (manager/owner only): one card per member ──
+                <div className="space-y-3">
+                  {(task.member_names ?? []).map((name, i) => {
+                    const memberId   = (task.members ?? [])[i]
+                    const done       = memberId ? (task.member_completions?.[String(memberId)] ?? 0) : 0
+                    const memberDone = done >= repeatCount
+                    const memberPct  = Math.min(100, Math.round((done / repeatCount) * 100))
+                    return (
+                      <div key={i} className="bg-surface-container-low px-3 py-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 bg-primary text-on-primary text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                              {nameInitials(name)}
+                            </span>
+                            <span className="text-sm font-semibold text-on-surface">{name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold ${memberDone ? 'text-green-600' : 'text-on-surface'}`}>
+                              {done} / {repeatCount}
+                            </span>
+                            {memberDone && <Badge color="success">Done</Badge>}
+                          </div>
+                        </div>
+                        <div className="h-1.5 bg-surface-container overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 ${memberDone ? 'bg-green-600' : 'bg-primary/60'}`}
+                            style={{ width: `${memberPct}%` }}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {Array.from({ length: Math.min(repeatCount, 12) }).map((_, j) => (
+                            <span
+                              key={j}
+                              className={`w-5 h-5 flex items-center justify-center text-[9px] font-bold border ${
+                                j < done
+                                  ? 'bg-primary border-primary text-on-primary'
+                                  : 'bg-surface-container-lowest border-outline-variant/30 text-on-surface-variant'
+                              }`}
+                            >
+                              {j + 1}
+                            </span>
+                          ))}
+                          {repeatCount > 12 && (
+                            <span className="text-xs text-on-surface-variant self-center">+{repeatCount - 12} more</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                // ── Singular task OR field staff on group task: single bar ──
+                <div className="bg-surface-container-low p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={`text-3xl font-black font-headline ${fullyDone ? 'text-primary' : 'text-on-surface'}`}>
+                        {displayCount}
+                        <span className="text-base font-medium text-on-surface-variant"> / {repeatCount}</span>
+                      </p>
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        {fullyDone ? 'All repetitions completed' : `${repeatCount - displayCount} remaining`}
+                      </p>
+                    </div>
+                    {fullyDone && <Badge color="success">Complete</Badge>}
                   </div>
-                  {fullyDone && <Badge color="success">Complete</Badge>}
+                  <div className="h-1.5 bg-surface-container overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${fullyDone ? 'bg-primary' : 'bg-primary/60'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Array.from({ length: Math.min(repeatCount, 20) }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={`w-6 h-6 flex items-center justify-center text-[9px] font-bold border ${
+                          i < displayCount
+                            ? 'bg-primary border-primary text-on-primary'
+                            : 'bg-surface-container-lowest border-outline-variant/30 text-on-surface-variant'
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                    ))}
+                    {repeatCount > 20 && (
+                      <span className="text-xs text-on-surface-variant self-center">+{repeatCount - 20} more</span>
+                    )}
+                  </div>
                 </div>
-                <div className="h-1.5 bg-surface-container overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-500 ${fullyDone ? 'bg-primary' : 'bg-primary/60'}`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {Array.from({ length: Math.min(repeatCount, 20) }).map((_, i) => (
-                    <span
-                      key={i}
-                      className={`w-6 h-6 flex items-center justify-center text-[9px] font-bold border ${
-                        i < recordCount
-                          ? 'bg-primary border-primary text-on-primary'
-                          : 'bg-surface-container-lowest border-outline-variant/30 text-on-surface-variant'
-                      }`}
-                    >
-                      {i + 1}
-                    </span>
-                  ))}
-                  {repeatCount > 20 && (
-                    <span className="text-xs text-on-surface-variant self-center">+{repeatCount - 20} more</span>
-                  )}
-                </div>
-              </div>
+              )}
             </section>
 
             {/* COMPLETION LOCATIONS — manager / owner only */}

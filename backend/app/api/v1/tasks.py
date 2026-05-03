@@ -78,12 +78,12 @@ async def submit_record(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/{task_id}/records", response_model=list[TaskRecordOut])
+@router.get("/{task_id}/records")
 async def list_task_records(
     task_id: int,
     _: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> list:
+) -> object:
     return await task_service.get_task_records(task_id, db)
 
 

@@ -56,7 +56,9 @@ function Avatar({ name }) {
 
 // ── Column defs ────────────────────────────────────────────────────────────
 
-function buildColumns(onView, onAssign) {
+function buildColumns(onView, onAssign, role) {
+  const normalizedRole = (role ?? '').toLowerCase()
+  const isManager = normalizedRole === 'owner' || normalizedRole === 'manager'
   return [
     columnHelper.accessor('id', {
       header: 'Task ID',
@@ -120,9 +122,43 @@ function buildColumns(onView, onAssign) {
     columnHelper.accessor('repeat_count', {
       header: 'Repetitions',
       cell: (info) => {
+        const task = info.row.original
         const total = info.getValue() ?? 1
-        const done = info.row.original.record_count ?? 0
-        const pct = Math.min(100, Math.round((done / total) * 100))
+
+        // ── Group task, manager/owner: overall % bar ──
+        if (task.assignment_type === 'group' && isManager) {
+          const memberIds   = task.members ?? []
+          // record_count is always accurate (counted from DB rows by the backend).
+          // member_completions can be empty on first load, so don't rely on it for the %.
+          const totalDone   = task.record_count ?? 0
+          const totalNeeded = memberIds.length > 0 ? memberIds.length * total : total
+          const pct     = Math.min(100, Math.round((totalDone / totalNeeded) * 100))
+          const allDone = totalDone >= totalNeeded
+
+          return (
+            <div className="min-w-[100px]">
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-xs font-bold ${allDone ? 'text-green-600' : 'text-on-surface'}`}>
+                  {pct}%
+                </span>
+                <span className="text-[10px] text-on-surface-variant">Group</span>
+              </div>
+              <div className="h-1.5 bg-outline-variant/20 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${allDone ? 'bg-green-600' : 'bg-primary'}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          )
+        }
+
+        // ── Singular task OR field staff on a group task: single bar ──
+        // Field staff see their own count; managers see the total.
+        const done = isManager
+          ? (task.record_count ?? 0)
+          : (task.my_record_count ?? 0)
+        const pct      = Math.min(100, Math.round((done / total) * 100))
         const complete = done >= total
         return (
           <div className="min-w-[90px]">
@@ -322,7 +358,10 @@ export default function TasksPage() {
   // Stable callbacks so columns array reference doesn't change every render
   const handleView   = useCallback((task) => setSelectedTask(task), [])
   const handleAssign = useCallback((task) => setSelectedTask(task), [])
-  const columns = useMemo(() => buildColumns(handleView, handleAssign), [handleView, handleAssign])
+  const columns = useMemo(
+    () => buildColumns(handleView, handleAssign, user?.role),
+    [handleView, handleAssign, user?.role],
+  )
 
   const table = useReactTable({
     data: tasks,

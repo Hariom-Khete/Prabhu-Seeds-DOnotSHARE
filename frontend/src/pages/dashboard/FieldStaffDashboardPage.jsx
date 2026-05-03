@@ -113,12 +113,14 @@ export default function FieldStaffDashboardPage() {
   const checkInMutation  = useCheckIn()
   const checkOutMutation = useCheckOut()
   const gpsLoadingRef    = useRef(false)
+  const justCheckedInRef = useRef(false)
+  const syncedRef        = useRef(false)
   const [gpsLoading, setGpsLoading] = useState(false)
 
   const currentMonth = format(new Date(), 'yyyy-MM')
   const { data: monthlyReport } = useMyMonthlyReport(currentMonth)
   const { data: travelData } = useTravelHistory({ month: currentMonth })
-  const { data: todayAttendance } = useMyTodayAttendance()
+  const { data: todayAttendance, isSuccess: todayLoaded } = useMyTodayAttendance()
 
   // Continuously track position while on duty — posts a waypoint every 100 m or 5 min
   useGpsWatcher({ attendanceId: todayAttendance?.id ?? null, enabled: checkedIn })
@@ -156,6 +158,22 @@ export default function FieldStaffDashboardPage() {
 
     return () => clearInterval(timerId)
   }, [checkedIn, dutyStartedAt])
+
+  // On first successful attendance fetch, reconcile Zustand duty state with the server.
+  // justCheckedInRef prevents this from overwriting a check-in that just happened
+  // before the background query had a chance to refresh.
+  useEffect(() => {
+    if (!todayLoaded || syncedRef.current) return
+    syncedRef.current = true
+    if (todayAttendance?.check_in && !todayAttendance.check_out) {
+      const startedAt = new Date(todayAttendance.check_in).getTime()
+      checkIn(startedAt)
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000))
+    } else if (!justCheckedInRef.current) {
+      checkOut()
+      setElapsedSeconds(0)
+    }
+  }, [todayLoaded, todayAttendance, checkIn, checkOut])
 
   const dutyClock = useMemo(() => {
     const hours = String(Math.floor(elapsedSeconds / 3600)).padStart(2, '0')
@@ -197,6 +215,7 @@ export default function FieldStaffDashboardPage() {
     } else {
       checkInMutation.mutate({ lat, lng }, {
         onSuccess: (data) => {
+          justCheckedInRef.current = true
           const startedAt = data?.check_in ? new Date(data.check_in).getTime() : Date.now()
           checkIn(startedAt)
           setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000))
@@ -204,7 +223,10 @@ export default function FieldStaffDashboardPage() {
         onError: (err) => {
           const msg = err?.response?.data?.detail ?? ''
           if (msg.toLowerCase().includes('already')) {
-            // State lost after page refresh — re-sync timer from server
+            // State lost after page refresh — re-sync timer from server.
+            // Mark justCheckedInRef so the background sync effect doesn't
+            // race and call checkOut() on a stale null response.
+            justCheckedInRef.current = true
             const startedAt = todayAttendance?.check_in
               ? new Date(todayAttendance.check_in).getTime()
               : Date.now()
@@ -411,7 +433,7 @@ export default function FieldStaffDashboardPage() {
                           )}
                           {isRepeat && (
                             <span className="text-xs text-primary font-semibold">
-                              {task.record_count ?? 0}/{task.repeat_count} done
+                              {task.my_record_count ?? 0}/{task.repeat_count} done
                             </span>
                           )}
                         </div>
