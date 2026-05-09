@@ -33,19 +33,78 @@ function boundingCenter(points) {
 }
 
 /**
- * Sample an array down to at most maxTotal points, keeping first + last.
- * DirectionsService allows max 25 waypoints (origin + destination + 23 intermediate).
+ * Ramer-Douglas-Peucker polyline simplification.
+ *
+ * Keeps the points that contribute most to the *shape* of the path
+ * (turns, bends) and drops redundant points on straight stretches.
+ * epsilon is in degrees — 0.0001° ≈ 11 m at Indian latitudes.
  */
-function samplePoints(points, maxTotal = 25) {
-  if (points.length <= maxTotal) return points
-  const result = [points[0]]
-  const middle = points.slice(1, -1)
-  const step = middle.length / (maxTotal - 2)
-  for (let i = 0; i < maxTotal - 2; i++) {
-    result.push(middle[Math.round(i * step)])
+function rdpSimplify(points, epsilon) {
+  if (points.length <= 2) return [...points]
+
+  const start = points[0]
+  const end   = points[points.length - 1]
+  const dx    = end.lng - start.lng
+  const dy    = end.lat - start.lat
+  const lenSq = dx * dx + dy * dy
+
+  let maxDist = 0
+  let maxIdx  = 0
+
+  for (let i = 1; i < points.length - 1; i++) {
+    let dist
+    if (lenSq === 0) {
+      const dlat = points[i].lat - start.lat
+      const dlng = points[i].lng - start.lng
+      dist = Math.sqrt(dlat * dlat + dlng * dlng)
+    } else {
+      // Perpendicular distance from point to the start→end line
+      const t       = ((points[i].lat - start.lat) * dy + (points[i].lng - start.lng) * dx) / lenSq
+      const projLat = start.lat + t * dy
+      const projLng = start.lng + t * dx
+      const dlat    = points[i].lat - projLat
+      const dlng    = points[i].lng - projLng
+      dist = Math.sqrt(dlat * dlat + dlng * dlng)
+    }
+    if (dist > maxDist) { maxDist = dist; maxIdx = i }
   }
-  result.push(points[points.length - 1])
-  return result
+
+  if (maxDist > epsilon) {
+    const left  = rdpSimplify(points.slice(0, maxIdx + 1), epsilon)
+    const right = rdpSimplify(points.slice(maxIdx), epsilon)
+    return [...left.slice(0, -1), ...right]
+  }
+
+  return [start, end]
+}
+
+/**
+ * Reduce points to at most maxPoints using RDP with binary-searched epsilon.
+ *
+ * Binary search finds the smallest epsilon that brings point count to <= maxPoints,
+ * maximising shape fidelity — turns and bends are kept, straight stretches thinned.
+ *
+ * DirectionsService limit: 25 total (origin + 23 intermediate + destination).
+ */
+function smartSample(points, maxPoints = 25) {
+  if (points.length <= maxPoints) return points
+
+  let lo = 0
+  let hi = 0.5   // 0.5° ≈ 55 km — large enough for any Indian journey
+  let best = [points[0], points[points.length - 1]]
+
+  for (let iter = 0; iter < 24; iter++) {
+    const mid        = (lo + hi) / 2
+    const simplified = rdpSimplify(points, mid)
+    if (simplified.length <= maxPoints) {
+      best = simplified
+      hi   = mid
+    } else {
+      lo = mid
+    }
+  }
+
+  return best.length >= 2 ? best : [points[0], points[points.length - 1]]
 }
 
 // ── Road-snapped directions component ────────────────────────────────────────
@@ -80,7 +139,7 @@ function RoadRoute({ path, onFallback }) {
     if (!routesLib || !rendererRef.current || path.length < 2) return
 
     const service = new routesLib.DirectionsService()
-    const sampled  = samplePoints(path, 25)
+    const sampled  = smartSample(path, 25)
 
     const origin      = sampled[0]
     const destination = sampled[sampled.length - 1]

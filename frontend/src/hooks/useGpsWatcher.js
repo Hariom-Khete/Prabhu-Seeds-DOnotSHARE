@@ -15,7 +15,7 @@
 import { useEffect, useRef } from 'react'
 import apiClient from '@/lib/axios'
 
-const MIN_DISTANCE_M  = 100          // post if moved > 100 m
+const MIN_DISTANCE_M  = 50           // post if moved > 50 m
 const MIN_HEARTBEAT_MS = 5 * 60_000  // post at least every 5 minutes
 
 /** Haversine distance in metres between two lat/lng pairs. */
