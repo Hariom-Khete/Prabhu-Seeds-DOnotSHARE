@@ -33,7 +33,10 @@ async def check_in(user_id: uuid.UUID, data: CheckInRequest, db: AsyncSession) -
         if existing.check_out is None:
             # Already active — record was loaded with selectinload above, safe to return as-is.
             return existing
-        # Previous session completed — allow re-check-in by resetting the record
+        # Previous session completed — allow re-check-in by resetting the record.
+        # Clear old waypoints so they don't bleed into the new session's route.
+        from sqlalchemy import delete as _delete
+        await db.execute(_delete(GpsWaypoint).where(GpsWaypoint.attendance_id == existing.id))
         existing.check_in = datetime.now(timezone.utc)
         existing.check_out = None
         existing.km = Decimal("0")

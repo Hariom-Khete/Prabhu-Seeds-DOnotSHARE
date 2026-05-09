@@ -34,7 +34,7 @@ async def list_tasks(
 @router.post("/", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
 async def create_task(
     body: TaskCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_roles("OWNER", "MANAGER"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> object:
     task = await task_service.create_task(body, current_user.id, db)
@@ -45,7 +45,7 @@ async def create_task(
 async def update_task(
     task_id: int,
     body: TaskUpdate,
-    _: Annotated[User, Depends(get_current_user)],
+    _: Annotated[User, Depends(require_roles("OWNER", "MANAGER"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> object:
     task = await task_service.update_task(task_id, body, db)

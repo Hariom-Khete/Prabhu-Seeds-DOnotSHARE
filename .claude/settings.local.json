@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python scripts/fake_journey.py)",
+      "Bash(venv/Scripts/python -c ' *)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" add frontend/.env backend/scripts/fake_journey.py)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" status --short)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" add -f frontend/.env backend/scripts/fake_journey.py)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" commit -m \"feat: add VITE_GOOGLE_MAP_ID to frontend env + fake journey seeder script\")",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" push deploy main)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" add frontend/src/pages/travel/components/TravelRouteMap.jsx)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" commit -m \"feat: use DirectionsService for road-snapped travel route map\")",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" push origin main)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" add backend/app/api/v1/travel.py frontend/src/pages/travel/hooks/useTravel.js frontend/src/pages/travel/TravelClaimsPage.jsx frontend/src/pages/travel/TravelHistoryPage.jsx)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" commit -m \"fix: travel claims visibility for owner/manager - date filter, POST slash, role warning\")",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" add frontend/src/hooks/useGpsWatcher.js frontend/src/pages/travel/components/TravelRouteMap.jsx)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" commit -m \"feat: RDP smart sampling + 50m waypoint gate for accurate route tracing\")",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" add frontend/src/hooks/useGpsWatcher.js)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" commit -m \"revert: restore 100m waypoint gate \\(RDP alone gives the accuracy gain\\)\")",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" add -A)",
+      "Bash(git -C \"C:/Users/acer/Desktop/Prabhu-Seeds\" commit -m \"fix: auth persistence, waypoint ownership, task role guards, re-checkin bleed, OTP redirect\")"
+    ]
+  }
+}

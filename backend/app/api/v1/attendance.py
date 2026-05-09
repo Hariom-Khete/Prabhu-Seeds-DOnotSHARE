@@ -56,9 +56,18 @@ async def check_out(
 @router.post("/waypoints", response_model=WaypointOut, status_code=status.HTTP_201_CREATED)
 async def add_waypoint(
     body: WaypointCreate,
-    _: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> object:
+    # Verify the attendance record belongs to the requesting user
+    att_result = await db.execute(
+        select(Attendance).where(Attendance.id == body.attendance_id)
+    )
+    attendance = att_result.scalar_one_or_none()
+    if not attendance:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
+    if attendance.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot add waypoints to another user's attendance")
     try:
         return await attendance_service.add_waypoint(body, db)
     except ValueError as e:

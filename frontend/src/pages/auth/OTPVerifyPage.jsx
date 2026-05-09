@@ -24,6 +24,11 @@ export default function OTPVerifyPage() {
   const location = useLocation()
   const mobile = location.state?.mobile ?? ''
 
+  // If someone lands here directly without going through login, send them back
+  useEffect(() => {
+    if (!mobile) navigate('/login', { replace: true })
+  }, [mobile, navigate])
+
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''))
   const [countdown, setCountdown] = useState(RESEND_SECONDS)
   const inputRefs = useRef([])
