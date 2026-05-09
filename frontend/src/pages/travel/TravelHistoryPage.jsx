@@ -142,7 +142,7 @@ function JourneyTracker({ user, onJourneyAdded }) {
       const arrTime = format(new Date(endTime), 'HH:mm')
 
       // Save to backend
-      await apiClient.post('/api/v1/expenses', {
+      await apiClient.post('/api/v1/expenses/', {
         date: format(new Date(st), 'yyyy-MM-dd'),
         type: 'travel',
         description: `Journey on ${format(new Date(st), 'dd MMM yyyy')} | Dep: ${depTime} → Arr: ${arrTime}`,

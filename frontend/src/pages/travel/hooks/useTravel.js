@@ -10,9 +10,16 @@ function cleanParams(filters = {}) {
 export function useTravelClaims(filters = {}) {
   const params = cleanParams(filters)
 
+  // Map frontend camelCase keys to backend snake_case query params
+  const backendParams = {
+    ...(params.statusFilter  ? { status_filter: params.statusFilter }   : {}),
+    ...(params.fromDate      ? { from_date:     params.fromDate }        : {}),
+    ...(params.toDate        ? { to_date:       params.toDate }          : {}),
+  }
+
   return useQuery({
     queryKey: ['travel', params],
-    queryFn: () => apiClient.get('/api/v1/travel', { params }).then((res) => res.data),
+    queryFn: () => apiClient.get('/api/v1/travel', { params: backendParams }).then((res) => res.data),
     placeholderData: (prev) => prev,
     refetchInterval: 30_000,
   })

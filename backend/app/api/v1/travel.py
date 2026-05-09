@@ -2,6 +2,7 @@
 Travel reimbursement router — convenience alias over /expenses filtered to type=travel.
 Provides the approve/reject workflow expected by Accounts role.
 """
+from datetime import date
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +27,8 @@ async def list_travel_claims(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     status_filter: str | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
 ) -> list:
     """
     List travel expenses with staff name included.
@@ -52,6 +55,10 @@ async def list_travel_claims(
 
     if status_filter:
         stmt = stmt.where(Expense.status == status_filter)
+    if from_date:
+        stmt = stmt.where(Expense.date >= from_date)
+    if to_date:
+        stmt = stmt.where(Expense.date <= to_date)
 
     result = await db.execute(stmt)
     expenses = result.scalars().all()

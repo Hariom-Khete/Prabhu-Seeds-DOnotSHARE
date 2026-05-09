@@ -43,7 +43,8 @@ function formatMoney(value) {
 
 export default function TravelClaimsPage() {
   const user = useAuthStore((s) => s.user)
-  const isAccounts = ['ACCOUNTS', 'OWNER', 'accounts', 'owner'].includes(user?.role)
+  const role = user?.role?.toLowerCase()
+  const canApprove = ['owner', 'manager', 'accounts'].includes(role)
 
   const [fromDate, setFromDate] = useState(toIsoDate(new Date(new Date().setDate(1))))
   const [toDate, setToDate] = useState(toIsoDate(new Date()))
@@ -62,17 +63,12 @@ export default function TravelClaimsPage() {
   const { data, isLoading, isError } = useTravelClaims({
     fromDate,
     toDate,
-    page,
-    pageSize,
-    department: selectedDepartment,
+    statusFilter: statusFilter !== 'all' ? statusFilter : undefined,
   })
 
   const rawClaims = useMemo(() => normalizeClaims(data), [data])
-
-  const claims = useMemo(() => {
-    if (statusFilter === 'all') return rawClaims
-    return rawClaims.filter((claim) => claim.status === statusFilter)
-  }, [rawClaims, statusFilter])
+  // Status filtering is now done server-side; rawClaims is already filtered
+  const claims = rawClaims
 
   const summary = {
     pendingInr: sumAmount(claims, 'pending'),
@@ -170,9 +166,9 @@ export default function TravelClaimsPage() {
         </div>
       }
     >
-      {!isAccounts && (
+      {!canApprove && (
         <div className="bg-error/10 text-error px-4 py-3 text-sm font-semibold">
-          This screen is intended for Accounts role.
+          You do not have permission to approve or reject travel claims.
         </div>
       )}
 
